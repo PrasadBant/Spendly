@@ -224,3 +224,71 @@
     .hero-actions .btn-primary,
     .hero-actions .btn-ghost { width: 100%; text-align: center; }
 }
+
+/* ------------------------------------------------------------------ */
+/* "See how it works" video modal                                      */
+/* ------------------------------------------------------------------ */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 15, 15, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.modal-overlay.is-open {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+    position: relative;
+    width: 100%;
+    max-width: 800px;
+    background: var(--paper-card);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+}
+
+.modal-close {
+    position: absolute;
+    top: -2.5rem;
+    right: 0;
+    background: transparent;
+    border: none;
+    color: var(--paper);
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+}
+
+.modal-video-wrapper {
+    position: relative;
+    width: 100%;
+    padding-top: 56.25%;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: #000;
+}
+
+.modal-video-wrapper iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+@media (max-width: 600px) {
+    .modal-overlay { padding: 1rem; }
+    .modal-close { top: -2.25rem; font-size: 1.75rem; }
+}
