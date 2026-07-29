@@ -64,6 +64,36 @@ def get_user_expense_summary(user_id):
         conn.close()
 
 
+def get_user_expenses(user_id, limit=None):
+    conn = get_db()
+    try:
+        query = "SELECT * FROM expenses WHERE user_id = ? ORDER BY date DESC, id DESC"
+        params = [user_id]
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+        return conn.execute(query, params).fetchall()
+    finally:
+        conn.close()
+
+
+def get_category_breakdown(user_id):
+    conn = get_db()
+    try:
+        return conn.execute(
+            """
+            SELECT category, COALESCE(SUM(amount), 0) AS total
+            FROM expenses
+            WHERE user_id = ?
+            GROUP BY category
+            ORDER BY total DESC
+            """,
+            (user_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -130,6 +160,45 @@ def seed_db():
                VALUES (?, ?, ?, ?, ?)""",
             sample_expenses,
         )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------------ #
+# Profile management helpers                                         #
+# ------------------------------------------------------------------ #
+
+# --- update_user (Subagent 1) ---
+def update_user(user_id, name, email):
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE users SET name = ?, email = ? WHERE id = ?",
+            (name, email, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+# --- update_user_password (Subagent 2) ---
+def update_user_password(user_id, password_hash):
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (password_hash, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+# --- delete_user (Subagent 3) ---
+def delete_user(user_id):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM expenses WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
     finally:
         conn.close()

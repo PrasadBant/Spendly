@@ -8,39 +8,89 @@
 
 {% block content %}
 
-<section class="profile-section">
-    <div class="profile-container">
+<section class="profile-dashboard">
+    <div class="profile-dashboard-inner">
 
-        <div class="profile-header">
-            <h1 class="profile-title">My Profile</h1>
-            <p class="profile-subtitle">Your account details and spending summary</p>
-        </div>
-
-        <div class="profile-card">
-            <div class="profile-info">
-                <div class="profile-field">
-                    <span class="profile-field-label">Name</span>
-                    <span class="profile-field-value">{{ user["name"] }}</span>
-                </div>
-                <div class="profile-field">
-                    <span class="profile-field-label">Email</span>
-                    <span class="profile-field-value">{{ user["email"] }}</span>
-                </div>
-                <div class="profile-field">
-                    <span class="profile-field-label">Member since</span>
-                    <span class="profile-field-value">{{ user["created_at"] }}</span>
-                </div>
+        <div class="profile-header-card">
+            <div class="profile-avatar">{{ initials }}</div>
+            <div class="profile-header-info">
+                <h1 class="profile-name">{{ user["name"] }}</h1>
+                <p class="profile-email">{{ user["email"] }}</p>
+                <p class="profile-member-since">Member since {{ member_since }}</p>
             </div>
         </div>
 
-        <div class="profile-card profile-stats">
-            <div class="profile-stat">
-                <span class="profile-stat-value">{{ summary["expense_count"] }}</span>
-                <span class="profile-stat-label">Expenses logged</span>
+        <div class="profile-actions">
+            <a href="{{ url_for('profile_edit') }}" class="btn-secondary">Edit Profile</a>
+            <a href="{{ url_for('profile_change_password') }}" class="btn-secondary">Change Password</a>
+            <form method="POST" action="{{ url_for('profile_delete') }}" id="delete-account-form">
+                <button type="submit" class="btn-danger" id="delete-account-btn">Delete Account</button>
+            </form>
+        </div>
+
+        <div class="profile-stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">Total Spent</span>
+                <span class="stat-value">₹{{ "{:,.2f}".format(summary["total_amount"]) }}</span>
             </div>
-            <div class="profile-stat">
-                <span class="profile-stat-value">₹{{ "%.2f"|format(summary["total_amount"]) }}</span>
-                <span class="profile-stat-label">Total spent</span>
+            <div class="stat-card">
+                <span class="stat-label">Transactions</span>
+                <span class="stat-value">{{ summary["expense_count"] }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Top Category</span>
+                <span class="stat-value">{{ top_category }}</span>
+            </div>
+        </div>
+
+        <div class="profile-panels">
+            <div class="panel">
+                <h2 class="panel-title">Recent Transactions</h2>
+                {% if recent_expenses %}
+                <table class="transactions-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th class="col-amount">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expense in recent_expenses %}
+                        <tr>
+                            <td>{{ expense["date"] }}</td>
+                            <td>{{ expense["description"] }}</td>
+                            <td><span class="cat-badge cat-{{ expense["category"]|lower }}">{{ expense["category"] }}</span></td>
+                            <td class="col-amount">₹{{ "{:,.2f}".format(expense["amount"]) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="panel-empty">No transactions yet.</p>
+                {% endif %}
+            </div>
+
+            <div class="panel">
+                <h2 class="panel-title">By Category</h2>
+                {% if category_breakdown %}
+                <div class="category-list">
+                    {% for row in category_breakdown %}
+                    <div class="category-row">
+                        <div class="category-row-top">
+                            <span class="category-name">{{ row["category"] }}</span>
+                            <span class="category-amount">₹{{ "{:,.2f}".format(row["total"]) }}</span>
+                        </div>
+                        <div class="category-bar-track">
+                            <div class="category-bar cat-bar-{{ row["category"]|lower }}" style="width: {{ (row['total'] / max_category_total * 100) if max_category_total else 0 }}%"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="panel-empty">No spending yet.</p>
+                {% endif %}
             </div>
         </div>
 

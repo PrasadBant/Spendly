@@ -1,18 +1,24 @@
 import os
 import re
 import sqlite3
+from datetime import datetime
 
 from flask import Flask, redirect, render_template, request, session, url_for
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from database.db import (
     create_user,
+    delete_user,
+    get_category_breakdown,
     get_db,
     get_user_by_email,
     get_user_by_id,
     get_user_expense_summary,
+    get_user_expenses,
     init_db,
     seed_db,
+    update_user,
+    update_user_password,
 )
 
 app = Flask(__name__)
@@ -135,8 +141,37 @@ def profile():
 
     user = get_user_by_id(session["user_id"])
     summary = get_user_expense_summary(session["user_id"])
+    category_breakdown = get_category_breakdown(session["user_id"])
+    recent_expenses = get_user_expenses(session["user_id"], limit=6)
 
-    return render_template("profile.html", user=user, summary=summary)
+    name_parts = user["name"].split()
+    initials = "".join(part[0] for part in name_parts[:2]).upper()
+    member_since = datetime.strptime(
+        user["created_at"], "%Y-%m-%d %H:%M:%S"
+    ).strftime("%d %b %Y")
+    recent_expenses = [
+        {
+            "date": datetime.strptime(e["date"], "%Y-%m-%d").strftime("%d %b %Y"),
+            "description": e["description"] or "",
+            "category": e["category"],
+            "amount": e["amount"],
+        }
+        for e in recent_expenses
+    ]
+    top_category = category_breakdown[0]["category"] if category_breakdown else "—"
+    max_category_total = category_breakdown[0]["total"] if category_breakdown else 0
+
+    return render_template(
+        "profile.html",
+        user=user,
+        summary=summary,
+        initials=initials,
+        member_since=member_since,
+        recent_expenses=recent_expenses,
+        category_breakdown=category_breakdown,
+        top_category=top_category,
+        max_category_total=max_category_total,
+    )
 
 
 @app.route("/expenses/add")
@@ -152,6 +187,94 @@ def edit_expense(id):
 @app.route("/expenses/<int:id>/delete")
 def delete_expense(id):
     return "Delete expense — coming in Step 9"
+
+
+# ------------------------------------------------------------------ #
+# Profile management routes                                          #
+# ------------------------------------------------------------------ #
+
+# --- /profile/edit (Subagent 1) ---
+@app.route("/profile/edit", methods=["GET", "POST"])
+def profile_edit():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    user = get_user_by_id(session["user_id"])
+
+    if request.method == "GET":
+        return render_template("profile_edit.html", name=user["name"], email=user["email"])
+
+    name = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+
+    if not name or not email:
+        return render_template(
+            "profile_edit.html", error="All fields are required.",
+            name=name, email=email,
+        )
+
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        return render_template(
+            "profile_edit.html", error="Please enter a valid email address.",
+            name=name, email=email,
+        )
+
+    try:
+        update_user(session["user_id"], name, email)
+    except sqlite3.IntegrityError:
+        return render_template(
+            "profile_edit.html", error="That email is already in use by another account.",
+            name=name, email=email,
+        )
+
+    return redirect(url_for("profile"))
+
+# --- /profile/change-password (Subagent 2) ---
+@app.route("/profile/change-password", methods=["GET", "POST"])
+def profile_change_password():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    if request.method == "GET":
+        return render_template("profile_change_password.html")
+
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    if not current_password or not new_password or not confirm_password:
+        return render_template(
+            "profile_change_password.html", error="All fields are required.",
+        )
+
+    user = get_user_by_id(session["user_id"])
+    if not check_password_hash(user["password_hash"], current_password):
+        return render_template(
+            "profile_change_password.html", error="Current password is incorrect.",
+        )
+
+    if len(new_password) < 8:
+        return render_template(
+            "profile_change_password.html", error="New password must be at least 8 characters.",
+        )
+
+    if new_password != confirm_password:
+        return render_template(
+            "profile_change_password.html", error="New password and confirmation do not match.",
+        )
+
+    update_user_password(session["user_id"], generate_password_hash(new_password))
+    return redirect(url_for("profile"))
+
+# --- /profile/delete (Subagent 3) ---
+@app.route("/profile/delete", methods=["POST"])
+def profile_delete():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    delete_user(session["user_id"])
+    session.pop("user_id", None)
+    return redirect(url_for("landing"))
 
 
 if __name__ == "__main__":

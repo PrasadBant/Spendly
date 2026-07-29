@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Profile — Spendly{% endblock %}
+
+{% block content %}
+
+<section class="auth-section">
+    <div class="auth-container">
+
+        <div class="auth-header">
+            <h1 class="auth-title">Edit your profile</h1>
+            <p class="auth-subtitle">Update your name and email address</p>
+        </div>
+
+        <div class="auth-card">
+            {% if error %}
+            <div class="auth-error">{{ error }}</div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('profile_edit') }}">
+                <div class="form-group">
+                    <label for="name">Full name</label>
+                    <input type="text" id="name" name="name"
+                           class="form-input" value="{{ name or '' }}" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email address</label>
+                    <input type="email" id="email" name="email"
+                           class="form-input" value="{{ email or '' }}" required>
+                </div>
+                <button type="submit" class="btn-submit">Save changes</button>
+            </form>
+        </div>
+
+        <p class="auth-switch">
+            <a href="{{ url_for('profile') }}">Back to profile</a>
+        </p>
+
+    </div>
+</section>
+
+{% endblock %}
