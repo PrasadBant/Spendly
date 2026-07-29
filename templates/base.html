@@ -21,7 +21,7 @@
             <div class="nav-links">
                 {% if session.user_id %}
                     <span class="nav-user">{{ current_user.name if current_user else '' }}</span>
-                    <a href="{{ url_for('logout') }}" class="nav-cta">Logout</a>
+                    <a href="{{ url_for('logout') }}" class="nav-cta">Sign out</a>
                 {% else %}
                     <a href="{{ url_for('login') }}">Sign in</a>
                     <a href="{{ url_for('register') }}" class="nav-cta">Get started</a>

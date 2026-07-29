@@ -18,6 +18,12 @@
     --danger-light: #fdecea;
     --border: #e4e1da;
     --border-soft: #eeebe4;
+    --cat-bills: #3766a3;
+    --cat-bills-light: #eaf1fa;
+    --cat-entertainment: #8b5e83;
+    --cat-entertainment-light: #f3e8f5;
+    --cat-shopping: #b5761f;
+    --cat-shopping-light: #fdf1e0;
 
     --font-display: 'DM Serif Display', Georgia, serif;
     --font-body: 'DM Sans', system-ui, sans-serif;
