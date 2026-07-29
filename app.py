@@ -10,6 +10,7 @@ from database.db import (
     get_db,
     get_user_by_email,
     get_user_by_id,
+    get_user_expense_summary,
     init_db,
     seed_db,
 )
@@ -41,7 +42,7 @@ def landing():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if "user_id" in session:
-        return redirect(url_for("landing"))
+        return redirect(url_for("profile"))
 
     if request.method == "GET":
         return render_template("register.html")
@@ -82,7 +83,7 @@ def register():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if "user_id" in session:
-        return redirect(url_for("landing"))
+        return redirect(url_for("profile"))
 
     if request.method == "GET":
         return render_template("login.html")
@@ -102,7 +103,7 @@ def login():
         )
 
     session["user_id"] = user["id"]
-    return redirect(url_for("landing"))
+    return redirect(url_for("profile"))
 
 
 @app.route("/terms")
@@ -129,7 +130,13 @@ def logout():
 
 @app.route("/profile")
 def profile():
-    return "Profile page — coming in Step 4"
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    user = get_user_by_id(session["user_id"])
+    summary = get_user_expense_summary(session["user_id"])
+
+    return render_template("profile.html", user=user, summary=summary)
 
 
 @app.route("/expenses/add")
