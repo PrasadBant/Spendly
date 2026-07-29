@@ -48,6 +48,22 @@ def get_user_by_id(user_id):
         conn.close()
 
 
+def get_user_expense_summary(user_id):
+    conn = get_db()
+    try:
+        return conn.execute(
+            """
+            SELECT COUNT(*) AS expense_count,
+                   COALESCE(SUM(amount), 0) AS total_amount
+            FROM expenses
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
