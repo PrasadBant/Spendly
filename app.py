@@ -139,10 +139,16 @@ def profile():
     if "user_id" not in session:
         return redirect(url_for("login"))
 
+    start_date, end_date = _parse_date_range(
+        request.args.get("start_date"), request.args.get("end_date")
+    )
+
     user = get_user_by_id(session["user_id"])
-    summary = get_user_expense_summary(session["user_id"])
-    category_breakdown = get_category_breakdown(session["user_id"])
-    recent_expenses = get_user_expenses(session["user_id"], limit=6)
+    summary = get_user_expense_summary(session["user_id"], start_date, end_date)
+    category_breakdown = get_category_breakdown(session["user_id"], start_date, end_date)
+    recent_expenses = get_user_expenses(
+        session["user_id"], limit=6, start_date=start_date, end_date=end_date
+    )
 
     name_parts = user["name"].split()
     initials = "".join(part[0] for part in name_parts[:2]).upper()
@@ -171,7 +177,22 @@ def profile():
         category_breakdown=category_breakdown,
         top_category=top_category,
         max_category_total=max_category_total,
+        start_date=start_date,
+        end_date=end_date,
     )
+
+
+def _parse_date_range(start_date, end_date):
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
+        end = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
+    except ValueError:
+        return None, None
+
+    if start and end and start > end:
+        return None, None
+
+    return start_date or None, end_date or None
 
 
 @app.route("/expenses/add")
