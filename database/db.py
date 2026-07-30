@@ -48,27 +48,44 @@ def get_user_by_id(user_id):
         conn.close()
 
 
-def get_user_expense_summary(user_id):
+def _date_filter_clause(user_id, start_date, end_date):
+    # params is a list (not a tuple, unlike the static param sets elsewhere
+    # in this file) because we conditionally append to it below.
+    clause = "user_id = ?"
+    params = [user_id]
+    if start_date is not None:
+        clause += " AND date >= ?"
+        params.append(start_date)
+    if end_date is not None:
+        clause += " AND date <= ?"
+        params.append(end_date)
+    return clause, params
+
+
+def get_user_expense_summary(user_id, start_date=None, end_date=None):
     conn = get_db()
     try:
+        # where_clause is assembled from static fragments only ("user_id = ?",
+        # "AND date >= ?", ...) — all actual values stay in params as ? placeholders.
+        where_clause, params = _date_filter_clause(user_id, start_date, end_date)
         return conn.execute(
-            """
+            f"""
             SELECT COUNT(*) AS expense_count,
                    COALESCE(SUM(amount), 0) AS total_amount
             FROM expenses
-            WHERE user_id = ?
+            WHERE {where_clause}
             """,
-            (user_id,),
+            params,
         ).fetchone()
     finally:
         conn.close()
 
 
-def get_user_expenses(user_id, limit=None):
+def get_user_expenses(user_id, limit=None, start_date=None, end_date=None):
     conn = get_db()
     try:
-        query = "SELECT * FROM expenses WHERE user_id = ? ORDER BY date DESC, id DESC"
-        params = [user_id]
+        where_clause, params = _date_filter_clause(user_id, start_date, end_date)
+        query = f"SELECT * FROM expenses WHERE {where_clause} ORDER BY date DESC, id DESC"
         if limit is not None:
             query += " LIMIT ?"
             params.append(limit)
@@ -77,18 +94,19 @@ def get_user_expenses(user_id, limit=None):
         conn.close()
 
 
-def get_category_breakdown(user_id):
+def get_category_breakdown(user_id, start_date=None, end_date=None):
     conn = get_db()
     try:
+        where_clause, params = _date_filter_clause(user_id, start_date, end_date)
         return conn.execute(
-            """
+            f"""
             SELECT category, COALESCE(SUM(amount), 0) AS total
             FROM expenses
-            WHERE user_id = ?
+            WHERE {where_clause}
             GROUP BY category
             ORDER BY total DESC
             """,
-            (user_id,),
+            params,
         ).fetchall()
     finally:
         conn.close()

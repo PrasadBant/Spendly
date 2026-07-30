@@ -85,6 +85,34 @@
     color: var(--ink);
 }
 
+/* Date filter */
+
+.date-filter-form {
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1.25rem 1.75rem;
+    display: flex;
+    align-items: flex-end;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.date-filter-form .form-group {
+    margin-bottom: 0;
+}
+
+.date-filter-clear {
+    font-size: 0.85rem;
+    color: var(--ink-muted);
+    text-decoration: underline;
+    padding-bottom: 0.6rem;
+}
+
+@media (max-width: 600px) {
+    .date-filter-form { padding: 1.25rem; }
+}
+
 /* Panels */
 
 .profile-panels {
