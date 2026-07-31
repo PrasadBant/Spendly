@@ -4,7 +4,7 @@ import re
 import sqlite3
 from datetime import datetime
 
-from flask import Flask, redirect, render_template, request, session, url_for
+from flask import Flask, abort, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from database.db import (
@@ -14,12 +14,14 @@ from database.db import (
     delete_user,
     get_category_breakdown,
     get_db,
+    get_expense_by_id,
     get_user_by_email,
     get_user_by_id,
     get_user_expense_summary,
     get_user_expenses,
     init_db,
     seed_db,
+    update_expense,
     update_user,
     update_user_password,
 )
@@ -160,6 +162,7 @@ def profile():
     ).strftime("%d %b %Y")
     recent_expenses = [
         {
+            "id": e["id"],
             "date": datetime.strptime(e["date"], "%Y-%m-%d").strftime("%d %b %Y"),
             "description": e["description"] or "",
             "category": e["category"],
@@ -255,9 +258,59 @@ def add_expense():
     return redirect(url_for("profile"))
 
 
-@app.route("/expenses/<int:id>/edit")
+@app.route("/expenses/<int:id>/edit", methods=["GET", "POST"])
 def edit_expense(id):
-    return "Edit expense — coming in Step 8"
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    expense = get_expense_by_id(id)
+    if expense is None or expense["user_id"] != session["user_id"]:
+        abort(404)
+
+    if request.method == "GET":
+        return render_template(
+            "expenses_edit.html", categories=CATEGORIES, expense=expense,
+            amount=expense["amount"], category=expense["category"],
+            date=expense["date"], description=expense["description"] or "",
+        )
+
+    amount = request.form.get("amount", "").strip()
+    category = request.form.get("category", "").strip()
+    date = request.form.get("date", "").strip()
+    description = request.form.get("description", "").strip()
+
+    def render_error(error):
+        return render_template(
+            "expenses_edit.html", categories=CATEGORIES, expense=expense,
+            error=error,
+            amount=amount, category=category, date=date, description=description,
+        )
+
+    if not amount:
+        return render_error("Amount is required.")
+
+    try:
+        amount_value = float(amount)
+    except ValueError:
+        return render_error("Amount must be a valid number.")
+
+    if not math.isfinite(amount_value) or amount_value <= 0:
+        return render_error("Amount must be a positive number.")
+
+    if category not in CATEGORIES:
+        return render_error("Please select a valid category.")
+
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return render_error("Please enter a valid date.")
+
+    try:
+        update_expense(id, amount_value, category, date, description)
+    except sqlite3.IntegrityError:
+        return render_error("Could not save expense. Please try again.")
+
+    return redirect(url_for("profile"))
 
 
 @app.route("/expenses/<int:id>/delete")
