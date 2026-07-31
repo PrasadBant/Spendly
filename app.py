@@ -195,6 +195,14 @@ def _parse_date_range(start_date, end_date):
     return start_date or None, end_date or None
 
 
+@app.route("/analytics")
+def analytics():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    return render_template("analytics.html")
+
+
 @app.route("/expenses/add")
 def add_expense():
     return "Add expense — coming in Step 7"

@@ -1,0 +1,87 @@
+/* ------------------------------------------------------------------ */
+/* Coming soon (Analytics)                                             */
+/* ------------------------------------------------------------------ */
+
+.coming-soon-section {
+    min-height: calc(100vh - 60px - 100px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+}
+
+.coming-soon-card {
+    width: 100%;
+    max-width: 640px;
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.06);
+    padding: 3.5rem 3rem;
+    text-align: center;
+}
+
+.coming-soon-icon {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: var(--paper);
+    border-radius: var(--radius-md);
+    font-size: 1.8rem;
+}
+
+.coming-soon-badge {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--paper);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.45rem 1.1rem;
+    border-radius: 999px;
+    margin-bottom: 1.5rem;
+}
+
+.coming-soon-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    color: var(--accent);
+    margin-bottom: 1rem;
+}
+
+.coming-soon-body {
+    font-size: 1rem;
+    color: var(--ink-muted);
+    line-height: 1.7;
+    max-width: 440px;
+    margin: 0 auto 1.75rem;
+}
+
+.coming-soon-dots {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.coming-soon-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+.coming-soon-caption {
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+}
+
+@media (max-width: 600px) {
+    .coming-soon-card { padding: 2.5rem 1.5rem; }
+}
