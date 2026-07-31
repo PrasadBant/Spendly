@@ -12,4 +12,15 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
     }
+
+    document.querySelectorAll(".expense-delete-form").forEach(function (form) {
+        form.addEventListener("submit", function (e) {
+            var confirmed = confirm(
+                "Are you sure you want to delete this expense? This cannot be undone."
+            );
+            if (!confirmed) {
+                e.preventDefault();
+            }
+        });
+    });
 });

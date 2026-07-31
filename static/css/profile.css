@@ -170,7 +170,13 @@
 
 .col-amount { text-align: right; }
 
-.col-actions { text-align: right; white-space: nowrap; }
+.col-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
 
 .cat-badge {
     display: inline-block;
@@ -271,11 +277,6 @@
     background: var(--paper-warm);
 }
 
-.btn-table {
-    padding: 0.3rem 0.8rem;
-    font-size: 0.8rem;
-}
-
 .btn-danger {
     padding: 0.6rem 1.2rem;
     border-radius: var(--radius-sm);
@@ -291,4 +292,9 @@
 .btn-danger:hover {
     background: var(--danger);
     color: var(--paper-card);
+}
+
+.btn-table {
+    padding: 0.3rem 0.8rem;
+    font-size: 0.8rem;
 }
