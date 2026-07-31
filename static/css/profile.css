@@ -170,6 +170,8 @@
 
 .col-amount { text-align: right; }
 
+.col-actions { text-align: right; white-space: nowrap; }
+
 .cat-badge {
     display: inline-block;
     padding: 0.2rem 0.65rem;
@@ -267,6 +269,11 @@
 
 .btn-secondary:hover {
     background: var(--paper-warm);
+}
+
+.btn-table {
+    padding: 0.3rem 0.8rem;
+    font-size: 0.8rem;
 }
 
 .btn-danger {
