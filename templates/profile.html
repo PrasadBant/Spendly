@@ -21,6 +21,7 @@
         </div>
 
         <div class="profile-actions">
+            <a href="{{ url_for('add_expense') }}" class="btn-secondary">Add Expense</a>
             <a href="{{ url_for('profile_edit') }}" class="btn-secondary">Edit Profile</a>
             <a href="{{ url_for('profile_change_password') }}" class="btn-secondary">Change Password</a>
             <form method="POST" action="{{ url_for('profile_delete') }}" id="delete-account-form">
