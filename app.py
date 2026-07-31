@@ -1,3 +1,4 @@
+import math
 import os
 import re
 import sqlite3
@@ -7,6 +8,8 @@ from flask import Flask, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from database.db import (
+    CATEGORIES,
+    create_expense,
     create_user,
     delete_user,
     get_category_breakdown,
@@ -203,9 +206,53 @@ def analytics():
     return render_template("analytics.html")
 
 
-@app.route("/expenses/add")
+@app.route("/expenses/add", methods=["GET", "POST"])
 def add_expense():
-    return "Add expense — coming in Step 7"
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    if request.method == "GET":
+        return render_template("expenses_add.html", categories=CATEGORIES)
+
+    amount = request.form.get("amount", "").strip()
+    category = request.form.get("category", "").strip()
+    date = request.form.get("date", "").strip()
+    description = request.form.get("description", "").strip()
+
+    def render_error(error):
+        return render_template(
+            "expenses_add.html", categories=CATEGORIES,
+            error=error,
+            amount=amount, category=category, date=date, description=description,
+        )
+
+    if not amount:
+        return render_error("Amount is required.")
+
+    try:
+        amount_value = float(amount)
+    except ValueError:
+        return render_error("Amount must be a valid number.")
+
+    if not math.isfinite(amount_value) or amount_value <= 0:
+        return render_error("Amount must be a positive number.")
+
+    if category not in CATEGORIES:
+        return render_error("Please select a valid category.")
+
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return render_error("Please enter a valid date.")
+
+    try:
+        # expenses.user_id has a FOREIGN KEY constraint; defensive guard in
+        # case the session's user was deleted in another tab mid-request.
+        create_expense(session["user_id"], amount_value, category, date, description)
+    except sqlite3.IntegrityError:
+        return render_error("Could not save expense. Please try again.")
+
+    return redirect(url_for("profile"))
 
 
 @app.route("/expenses/<int:id>/edit")
