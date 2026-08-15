@@ -23,4 +23,15 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
     });
+
+    document.querySelectorAll(".recurring-delete-form").forEach(function (form) {
+        form.addEventListener("submit", function (e) {
+            var confirmed = confirm(
+                "Cancel this recurring expense? Expenses already created will not be removed."
+            );
+            if (!confirmed) {
+                e.preventDefault();
+            }
+        });
+    });
 });

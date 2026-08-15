@@ -2,7 +2,7 @@ import math
 import os
 import re
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Flask, abort, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -10,18 +10,23 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from database.db import (
     CATEGORIES,
     create_expense,
+    create_recurring_expense,
     create_user,
     delete_expense_by_id,
+    delete_recurring_expense_by_id,
     delete_user,
     get_category_breakdown,
     get_db,
     get_expense_by_id,
+    get_recurring_expense_by_id,
+    get_recurring_expenses,
     get_user_by_email,
     get_user_by_id,
     get_user_expense_summary,
     get_user_expenses,
     init_db,
     seed_db,
+    sync_due_recurring_expenses,
     update_expense,
     update_user,
     update_user_password,
@@ -145,6 +150,8 @@ def profile():
     if "user_id" not in session:
         return redirect(url_for("login"))
 
+    sync_due_recurring_expenses(session["user_id"])
+
     start_date, end_date = _parse_date_range(
         request.args.get("start_date"), request.args.get("end_date")
     )
@@ -189,6 +196,33 @@ def profile():
     )
 
 
+def _validate_amount(raw_amount):
+    """Shared by add_expense/edit_expense/add_recurring_expense.
+    Returns (amount_value, error) — error is None on success."""
+    if not raw_amount:
+        return None, "Amount is required."
+
+    try:
+        amount_value = float(raw_amount)
+    except ValueError:
+        return None, "Amount must be a valid number."
+
+    if not math.isfinite(amount_value) or amount_value <= 0:
+        return None, "Amount must be a positive number."
+
+    return amount_value, None
+
+
+def _validate_date_string(raw_date, error="Please enter a valid date."):
+    """Shared by add_expense/edit_expense/add_recurring_expense.
+    Returns an error string, or None if raw_date is a valid 'YYYY-MM-DD'."""
+    try:
+        datetime.strptime(raw_date, "%Y-%m-%d")
+    except ValueError:
+        return error
+    return None
+
+
 def _parse_date_range(start_date, end_date):
     try:
         start = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
@@ -230,24 +264,16 @@ def add_expense():
             amount=amount, category=category, date=date, description=description,
         )
 
-    if not amount:
-        return render_error("Amount is required.")
-
-    try:
-        amount_value = float(amount)
-    except ValueError:
-        return render_error("Amount must be a valid number.")
-
-    if not math.isfinite(amount_value) or amount_value <= 0:
-        return render_error("Amount must be a positive number.")
+    amount_value, amount_error = _validate_amount(amount)
+    if amount_error:
+        return render_error(amount_error)
 
     if category not in CATEGORIES:
         return render_error("Please select a valid category.")
 
-    try:
-        datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        return render_error("Please enter a valid date.")
+    date_error = _validate_date_string(date, "Please enter a valid date.")
+    if date_error:
+        return render_error(date_error)
 
     try:
         # expenses.user_id has a FOREIGN KEY constraint; defensive guard in
@@ -287,24 +313,16 @@ def edit_expense(id):
             amount=amount, category=category, date=date, description=description,
         )
 
-    if not amount:
-        return render_error("Amount is required.")
-
-    try:
-        amount_value = float(amount)
-    except ValueError:
-        return render_error("Amount must be a valid number.")
-
-    if not math.isfinite(amount_value) or amount_value <= 0:
-        return render_error("Amount must be a positive number.")
+    amount_value, amount_error = _validate_amount(amount)
+    if amount_error:
+        return render_error(amount_error)
 
     if category not in CATEGORIES:
         return render_error("Please select a valid category.")
 
-    try:
-        datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        return render_error("Please enter a valid date.")
+    date_error = _validate_date_string(date, "Please enter a valid date.")
+    if date_error:
+        return render_error(date_error)
 
     try:
         update_expense(id, amount_value, category, date, description)
@@ -325,6 +343,84 @@ def delete_expense(id):
 
     delete_expense_by_id(id)
     return redirect(url_for("profile"))
+
+
+@app.route("/expenses/recurring")
+def expenses_recurring():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    recurring_expenses = get_recurring_expenses(session["user_id"])
+    return render_template(
+        "expenses_recurring.html",
+        categories=CATEGORIES,
+        recurring_expenses=recurring_expenses,
+    )
+
+
+@app.route("/expenses/recurring/add", methods=["POST"])
+def add_recurring_expense():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    amount = request.form.get("amount", "").strip()
+    category = request.form.get("category", "").strip()
+    interval = request.form.get("interval", "").strip()
+    start_date = request.form.get("start_date", "").strip()
+    description = request.form.get("description", "").strip()
+
+    def render_error(error):
+        return render_template(
+            "expenses_recurring.html", categories=CATEGORIES,
+            recurring_expenses=get_recurring_expenses(session["user_id"]),
+            error=error,
+            amount=amount, category=category, interval=interval,
+            start_date=start_date, description=description,
+        )
+
+    amount_value, amount_error = _validate_amount(amount)
+    if amount_error:
+        return render_error(amount_error)
+
+    if category not in CATEGORIES:
+        return render_error("Please select a valid category.")
+
+    if interval not in ("weekly", "monthly"):
+        return render_error("Please select a valid interval.")
+
+    date_error = _validate_date_string(start_date, "Please enter a valid start date.")
+    if date_error:
+        return render_error(date_error)
+
+    # Bounds the sync_due_recurring_expenses() backfill loop — without this,
+    # a far-past start_date + a short interval could generate an unbounded
+    # number of expense rows on the next /profile load.
+    one_year_ago = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+    if start_date < one_year_ago:
+        return render_error("Start date can't be more than a year in the past.")
+
+    try:
+        create_recurring_expense(
+            session["user_id"], amount_value, category, description,
+            interval, start_date,
+        )
+    except sqlite3.IntegrityError:
+        return render_error("Could not save recurring expense. Please try again.")
+
+    return redirect(url_for("expenses_recurring"))
+
+
+@app.route("/expenses/recurring/<int:id>/delete", methods=["POST"])
+def delete_recurring_expense(id):
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    template = get_recurring_expense_by_id(id)
+    if template is None or template["user_id"] != session["user_id"]:
+        abort(404)
+
+    delete_recurring_expense_by_id(id)
+    return redirect(url_for("expenses_recurring"))
 
 
 # ------------------------------------------------------------------ #
