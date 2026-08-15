@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Recurring Expenses — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="auth-section">
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1 class="auth-title">Recurring Expenses</h1>
+            <p class="auth-subtitle">Automate expenses that repeat weekly or monthly</p>
+        </div>
+        <div class="auth-card">
+            {% if error %}
+            <div class="auth-error">{{ error }}</div>
+            {% endif %}
+            <form method="POST" action="{{ url_for('add_recurring_expense') }}">
+                <div class="form-group">
+                    <label for="amount">Amount</label>
+                    <input type="number" id="amount" name="amount" class="form-input"
+                           step="0.01" min="0.01" value="{{ amount or '' }}" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="category">Category</label>
+                    <select id="category" name="category" class="form-input" required>
+                        <option value="" disabled {% if not category %}selected{% endif %}>Select a category</option>
+                        {% for c in categories %}
+                        <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="interval">Repeats</label>
+                    <select id="interval" name="interval" class="form-input" required>
+                        <option value="" disabled {% if not interval %}selected{% endif %}>Select frequency</option>
+                        <option value="weekly" {% if interval == 'weekly' %}selected{% endif %}>Weekly</option>
+                        <option value="monthly" {% if interval == 'monthly' %}selected{% endif %}>Monthly</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="start_date">Start Date</label>
+                    <input type="date" id="start_date" name="start_date" class="form-input"
+                           value="{{ start_date or '' }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description (optional)</label>
+                    <input type="text" id="description" name="description" class="form-input"
+                           value="{{ description or '' }}">
+                </div>
+                <button type="submit" class="btn-submit">Add Recurring Expense</button>
+            </form>
+        </div>
+        <p class="auth-switch"><a href="{{ url_for('profile') }}">Back to profile</a></p>
+    </div>
+</section>
+
+<section class="profile-dashboard">
+    <div class="profile-dashboard-inner">
+        <div class="panel">
+            <h2 class="panel-title">Current Recurring Expenses</h2>
+            {% if recurring_expenses %}
+            <table class="transactions-table">
+                <thead>
+                    <tr>
+                        <th>Next Run</th>
+                        <th>Description</th>
+                        <th>Category</th>
+                        <th class="col-amount">Amount</th>
+                        <th>Repeats</th>
+                        <th class="col-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in recurring_expenses %}
+                    <tr>
+                        <td>{{ r["next_run_date"] }}</td>
+                        <td>{{ r["description"] or "" }}</td>
+                        <td><span class="cat-badge cat-{{ r["category"]|lower }}">{{ r["category"] }}</span></td>
+                        <td class="col-amount">₹{{ "{:,.2f}".format(r["amount"]) }}</td>
+                        <td>{{ r["interval"]|capitalize }}</td>
+                        <td class="col-actions">
+                            <form method="POST" action="{{ url_for('delete_recurring_expense', id=r['id']) }}" class="recurring-delete-form">
+                                <button type="submit" class="btn-danger btn-table">Cancel</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="panel-empty">No recurring expenses yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{% endblock %}

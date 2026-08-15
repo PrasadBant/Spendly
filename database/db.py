@@ -1,6 +1,7 @@
+import calendar
 import os
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from werkzeug.security import generate_password_hash
 
@@ -89,6 +90,123 @@ def delete_expense_by_id(expense_id):
     conn = get_db()
     try:
         conn.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _add_one_month(d):
+    # Advance by one calendar month, clamping to the target month's last
+    # day (Jan 31 -> Feb 28/29) instead of overflowing into the next month.
+    month = d.month + 1
+    year = d.year
+    if month > 12:
+        month = 1
+        year += 1
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(d.day, last_day))
+
+
+def _advance_interval(d, interval):
+    # Note: each advance is computed from the previous occurrence, not the
+    # original start date, so a monthly template started on the 31st drifts
+    # (31 -> 28 -> 28 -> 28...) rather than jumping back to 31 in months
+    # that have one. Accepted trade-off — avoids a python-dateutil dependency.
+    if interval == "weekly":
+        return d + timedelta(weeks=1)
+    return _add_one_month(d)
+
+
+def create_recurring_expense(
+    user_id, amount, category, description, interval, start_date
+):
+    conn = get_db()
+    try:
+        # start_date becomes the template's first next_run_date — the date
+        # sync_due_recurring_expenses() will treat as the first occurrence due.
+        cursor = conn.execute(
+            "INSERT INTO recurring_expenses "
+            "(user_id, amount, category, description, interval, next_run_date) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, amount, category, description, interval, start_date),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_recurring_expenses(user_id):
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT * FROM recurring_expenses WHERE user_id = ? "
+            "ORDER BY next_run_date ASC, id DESC",
+            (user_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_recurring_expense_by_id(recurring_id):
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT * FROM recurring_expenses WHERE id = ?", (recurring_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+
+def delete_recurring_expense_by_id(recurring_id):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM recurring_expenses WHERE id = ?", (recurring_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def sync_due_recurring_expenses(user_id):
+    # Lazy generation: called on every /profile load. Backfills every
+    # missed occurrence (not just one) so a user who hasn't logged in for
+    # months gets caught up in a single pass, then is a no-op until the
+    # next occurrence comes due.
+    today = date.today()
+    conn = get_db()
+    try:
+        templates = conn.execute(
+            "SELECT * FROM recurring_expenses WHERE user_id = ?", (user_id,)
+        ).fetchall()
+
+        for template in templates:
+            next_run = datetime.strptime(
+                template["next_run_date"], "%Y-%m-%d"
+            ).date()
+            while next_run <= today:
+                # Inserted on this same connection (not via create_expense(),
+                # which opens/commits its own connection) so every backfilled
+                # expense and the next_run_date advance below commit together
+                # — a mid-backfill crash can't leave rows generated without
+                # next_run_date having moved past them.
+                conn.execute(
+                    "INSERT INTO expenses (user_id, amount, category, date, description) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        template["user_id"],
+                        template["amount"],
+                        template["category"],
+                        next_run.strftime("%Y-%m-%d"),
+                        template["description"],
+                    ),
+                )
+                next_run = _advance_interval(next_run, template["interval"])
+
+            if next_run.strftime("%Y-%m-%d") != template["next_run_date"]:
+                conn.execute(
+                    "UPDATE recurring_expenses SET next_run_date = ? WHERE id = ?",
+                    (next_run.strftime("%Y-%m-%d"), template["id"]),
+                )
         conn.commit()
     finally:
         conn.close()
@@ -185,6 +303,19 @@ def init_db():
                 category TEXT NOT NULL,
                 date TEXT NOT NULL,
                 description TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS recurring_expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                category TEXT NOT NULL,
+                description TEXT,
+                interval TEXT NOT NULL,
+                next_run_date TEXT NOT NULL,
                 created_at TEXT DEFAULT (datetime('now')),
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
