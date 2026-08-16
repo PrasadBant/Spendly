@@ -276,6 +276,47 @@ def get_category_breakdown(user_id, start_date=None, end_date=None):
         conn.close()
 
 
+def _search_filter_clause(
+    user_id, q=None, category=None, min_amount=None, max_amount=None,
+    start_date=None, end_date=None,
+):
+    # Builds on _date_filter_clause instead of duplicating its date logic —
+    # every value still stays in params as a ? placeholder, only static SQL
+    # fragments get appended to clause.
+    clause, params = _date_filter_clause(user_id, start_date, end_date)
+    if q is not None:
+        clause += " AND description LIKE ?"
+        params.append(f"%{q}%")
+    if category is not None:
+        clause += " AND category = ?"
+        params.append(category)
+    if min_amount is not None:
+        clause += " AND amount >= ?"
+        params.append(min_amount)
+    if max_amount is not None:
+        clause += " AND amount <= ?"
+        params.append(max_amount)
+    return clause, params
+
+
+def search_user_expenses(
+    user_id, q=None, category=None, min_amount=None, max_amount=None,
+    start_date=None, end_date=None,
+):
+    conn = get_db()
+    try:
+        where_clause, params = _search_filter_clause(
+            user_id, q=q, category=category, min_amount=min_amount,
+            max_amount=max_amount, start_date=start_date, end_date=end_date,
+        )
+        return conn.execute(
+            f"SELECT * FROM expenses WHERE {where_clause} ORDER BY date DESC, id DESC",
+            params,
+        ).fetchall()
+    finally:
+        conn.close()
+
+
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
