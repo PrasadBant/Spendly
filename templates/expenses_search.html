@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Search Expenses — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="profile-dashboard">
+    <div class="profile-dashboard-inner">
+
+        <div class="auth-header">
+            <h1 class="auth-title">Search Expenses</h1>
+            <p class="auth-subtitle">Find a transaction by description, category, amount, or date</p>
+        </div>
+
+        {% if error %}
+        <div class="auth-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="GET" action="{{ url_for('expenses_search') }}" class="date-filter-form">
+            <div class="form-group">
+                <label for="q">Description</label>
+                <input type="text" id="q" name="q" class="form-input" value="{{ q or '' }}" placeholder="e.g. coffee">
+            </div>
+            <div class="form-group">
+                <label for="category">Category</label>
+                <select id="category" name="category" class="form-input">
+                    <option value="" {% if not category %}selected{% endif %}>All categories</option>
+                    {% for c in categories %}
+                    <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="min_amount">Min amount</label>
+                <input type="number" id="min_amount" name="min_amount" class="form-input"
+                       step="0.01" min="0" value="{{ min_amount or '' }}">
+            </div>
+            <div class="form-group">
+                <label for="max_amount">Max amount</label>
+                <input type="number" id="max_amount" name="max_amount" class="form-input"
+                       step="0.01" min="0" value="{{ max_amount or '' }}">
+            </div>
+            <div class="form-group">
+                <label for="start_date">From</label>
+                <input type="date" id="start_date" name="start_date" class="form-input" value="{{ start_date or '' }}">
+            </div>
+            <div class="form-group">
+                <label for="end_date">To</label>
+                <input type="date" id="end_date" name="end_date" class="form-input" value="{{ end_date or '' }}">
+            </div>
+            <button type="submit" class="btn-secondary">Search</button>
+            {% if filters_applied %}
+            <a href="{{ url_for('expenses_search') }}" class="date-filter-clear">Clear filters</a>
+            {% endif %}
+        </form>
+
+        <div class="panel">
+            <h2 class="panel-title">Results</h2>
+            {% if results is none %}
+            <p class="panel-empty">Enter a filter above to search your expenses.</p>
+            {% elif results %}
+            <table class="transactions-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Category</th>
+                        <th class="col-amount">Amount</th>
+                        <th class="col-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for expense in results %}
+                    <tr>
+                        <td>{{ expense["date"] }}</td>
+                        <td>{{ expense["description"] }}</td>
+                        <td><span class="cat-badge cat-{{ expense["category"]|lower }}">{{ expense["category"] }}</span></td>
+                        <td class="col-amount">₹{{ "{:,.2f}".format(expense["amount"]) }}</td>
+                        <td class="col-actions">
+                            <a href="{{ url_for('edit_expense', id=expense['id']) }}" class="btn-secondary btn-table">Edit</a>
+                            <form method="POST" action="{{ url_for('delete_expense', id=expense['id']) }}" class="expense-delete-form">
+                                <button type="submit" class="btn-danger btn-table">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="panel-empty">No expenses matched your search.</p>
+            {% endif %}
+        </div>
+
+    </div>
+</section>
+
+{% endblock %}

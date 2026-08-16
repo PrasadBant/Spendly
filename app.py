@@ -25,6 +25,7 @@ from database.db import (
     get_user_expense_summary,
     get_user_expenses,
     init_db,
+    search_user_expenses,
     seed_db,
     sync_due_recurring_expenses,
     update_expense,
@@ -168,16 +169,7 @@ def profile():
     member_since = datetime.strptime(
         user["created_at"], "%Y-%m-%d %H:%M:%S"
     ).strftime("%d %b %Y")
-    recent_expenses = [
-        {
-            "id": e["id"],
-            "date": datetime.strptime(e["date"], "%Y-%m-%d").strftime("%d %b %Y"),
-            "description": e["description"] or "",
-            "category": e["category"],
-            "amount": e["amount"],
-        }
-        for e in recent_expenses
-    ]
+    recent_expenses = _format_expenses_for_display(recent_expenses)
     top_category = category_breakdown[0]["category"] if category_breakdown else "—"
     max_category_total = category_breakdown[0]["total"] if category_breakdown else 0
 
@@ -194,6 +186,21 @@ def profile():
         start_date=start_date,
         end_date=end_date,
     )
+
+
+def _format_expenses_for_display(expenses):
+    """Shared by profile()/expenses_search() — turns raw expense rows into
+    display-ready dicts (formatted date, description defaulted to "")."""
+    return [
+        {
+            "id": e["id"],
+            "date": datetime.strptime(e["date"], "%Y-%m-%d").strftime("%d %b %Y"),
+            "description": e["description"] or "",
+            "category": e["category"],
+            "amount": e["amount"],
+        }
+        for e in expenses
+    ]
 
 
 def _validate_amount(raw_amount):
@@ -234,6 +241,26 @@ def _parse_date_range(start_date, end_date):
         return None, None
 
     return start_date or None, end_date or None
+
+
+def _validate_amount_bound(raw_value, error):
+    """Parses an optional min/max amount search bound (expenses_search).
+    Unlike _validate_amount, an empty raw_value means "no bound" and is
+    valid, not an error. Returns (value_or_None, error) — error is None
+    on success."""
+    raw_value = (raw_value or "").strip()
+    if not raw_value:
+        return None, None
+
+    try:
+        value = float(raw_value)
+    except ValueError:
+        return None, error
+
+    if not math.isfinite(value) or value < 0:
+        return None, error
+
+    return value, None
 
 
 @app.route("/analytics")
@@ -421,6 +448,76 @@ def delete_recurring_expense(id):
 
     delete_recurring_expense_by_id(id)
     return redirect(url_for("expenses_recurring"))
+
+
+@app.route("/expenses/search")
+def expenses_search():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    raw_q = request.args.get("q", "").strip()
+    raw_category = request.args.get("category", "").strip()
+    raw_min_amount = request.args.get("min_amount", "").strip()
+    raw_max_amount = request.args.get("max_amount", "").strip()
+    raw_start_date = request.args.get("start_date", "").strip()
+    raw_end_date = request.args.get("end_date", "").strip()
+
+    filters_applied = any([
+        raw_q, raw_category, raw_min_amount, raw_max_amount,
+        raw_start_date, raw_end_date,
+    ])
+
+    def render(error=None, results=None):
+        return render_template(
+            "expenses_search.html",
+            categories=CATEGORIES,
+            error=error,
+            filters_applied=filters_applied,
+            results=results,
+            q=raw_q, category=raw_category,
+            min_amount=raw_min_amount, max_amount=raw_max_amount,
+            start_date=raw_start_date, end_date=raw_end_date,
+        )
+
+    if not filters_applied:
+        return render()
+
+    min_amount_value, min_amount_error = _validate_amount_bound(
+        raw_min_amount, "Minimum amount must be a non-negative number."
+    )
+    if min_amount_error:
+        return render(error=min_amount_error)
+
+    max_amount_value, max_amount_error = _validate_amount_bound(
+        raw_max_amount, "Maximum amount must be a non-negative number."
+    )
+    if max_amount_error:
+        return render(error=max_amount_error)
+
+    if (
+        min_amount_value is not None
+        and max_amount_value is not None
+        and min_amount_value > max_amount_value
+    ):
+        return render(error="Minimum amount can't be greater than maximum amount.")
+
+    # Invalid category values (only reachable via URL tampering, since the
+    # form field is a <select>) are silently dropped rather than errored —
+    # same convention _parse_date_range already uses for a bad date range
+    # on this same style of GET-querystring filter.
+    category = raw_category if raw_category in CATEGORIES else None
+    start_date, end_date = _parse_date_range(raw_start_date, raw_end_date)
+
+    matches = search_user_expenses(
+        session["user_id"],
+        q=raw_q or None,
+        category=category,
+        min_amount=min_amount_value,
+        max_amount=max_amount_value,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return render(results=_format_expenses_for_display(matches))
 
 
 # ------------------------------------------------------------------ #
