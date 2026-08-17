@@ -3,31 +3,66 @@
 {% block title %}Analytics — Spendly{% endblock %}
 
 {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/analytics.css') }}">
 {% endblock %}
 
 {% block content %}
 
-<section class="coming-soon-section">
-    <div class="coming-soon-card">
-        <div class="coming-soon-icon">⏱</div>
+<section class="profile-dashboard">
+    <div class="profile-dashboard-inner">
 
-        <span class="coming-soon-badge">Coming Soon</span>
-
-        <h1 class="coming-soon-title">Advanced Analytics</h1>
-
-        <p class="coming-soon-body">
-            We're working on powerful insights and visualizations
-            to help you understand your spending patterns better.
-        </p>
-
-        <div class="coming-soon-dots">
-            <span></span>
-            <span></span>
-            <span></span>
+        <div class="auth-header">
+            <h1 class="auth-title">Analytics</h1>
+            <p class="auth-subtitle">This month vs last month</p>
         </div>
 
-        <p class="coming-soon-caption">We're crafting something special</p>
+        <div class="profile-stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">This Month</span>
+                <span class="stat-value">₹{{ "{:,.2f}".format(current_total) }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Last Month</span>
+                <span class="stat-value">₹{{ "{:,.2f}".format(previous_total) }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Change</span>
+                <span class="stat-value stat-change stat-change-{{ change_direction }}">{{ change_label }}</span>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2 class="panel-title">By Category</h2>
+            {% if category_comparison %}
+            <div class="category-list">
+                {% for row in category_comparison %}
+                <div class="category-row">
+                    <div class="category-row-top">
+                        <span class="category-name">{{ row["category"] }}</span>
+                    </div>
+                    <div class="comparison-bar-line">
+                        <span class="comparison-bar-label">This month</span>
+                        <div class="category-bar-track">
+                            <div class="category-bar cat-bar-{{ row['category']|lower }}" style="width: {{ row['current_bar_pct'] }}%"></div>
+                        </div>
+                        <span class="comparison-bar-value">₹{{ "{:,.2f}".format(row["current_total"]) }}</span>
+                    </div>
+                    <div class="comparison-bar-line">
+                        <span class="comparison-bar-label">Last month</span>
+                        <div class="category-bar-track">
+                            <div class="category-bar category-bar-muted" style="width: {{ row['previous_bar_pct'] }}%"></div>
+                        </div>
+                        <span class="comparison-bar-value">₹{{ "{:,.2f}".format(row["previous_total"]) }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="panel-empty">No spending in either month yet.</p>
+            {% endif %}
+        </div>
+
     </div>
 </section>
 

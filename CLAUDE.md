@@ -102,6 +102,7 @@ pytest -s
 | `GET /expenses/<id>/delete` | Implemented — Step 9 |
 | `GET /expenses/recurring` | Implemented — Step 10 |
 | `GET /expenses/search` | Implemented — Step 11 |
+| `GET /analytics` | Implemented — Step 12 |
 
 **Do not implement a stub route unless the active task explicitly targets that step.**
 
