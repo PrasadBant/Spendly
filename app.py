@@ -1,8 +1,9 @@
+import calendar
 import math
 import os
 import re
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import Flask, abort, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -263,12 +264,105 @@ def _validate_amount_bound(raw_value, error):
     return value, None
 
 
+def _current_and_previous_month_ranges():
+    """Returns (curr_start, curr_end, prev_start, prev_end) as 'YYYY-MM-DD'
+    strings: the current calendar month (1st through today) and the full
+    previous calendar month, correctly rolling the year back in January."""
+    today = date.today()
+
+    current_start = date(today.year, today.month, 1)
+    current_end = today
+
+    if today.month == 1:
+        prev_year, prev_month = today.year - 1, 12
+    else:
+        prev_year, prev_month = today.year, today.month - 1
+
+    previous_start = date(prev_year, prev_month, 1)
+    previous_last_day = calendar.monthrange(prev_year, prev_month)[1]
+    previous_end = date(prev_year, prev_month, previous_last_day)
+
+    return (
+        current_start.isoformat(),
+        current_end.isoformat(),
+        previous_start.isoformat(),
+        previous_end.isoformat(),
+    )
+
+
+def _build_category_comparison(current_by_category, previous_by_category):
+    """Merges current/previous category totals into sorted comparison rows.
+    A category is included if it has spend in either month — not just
+    categories present in both — so a category that dropped to zero this
+    month still shows up rather than being silently dropped."""
+    all_categories = set(current_by_category) | set(previous_by_category)
+    max_total = max(
+        [*current_by_category.values(), *previous_by_category.values()], default=0
+    )
+
+    def bar_pct(total):
+        return total / max_total * 100 if max_total else 0
+
+    rows = [
+        {
+            "category": category,
+            "current_total": current_by_category.get(category, 0),
+            "previous_total": previous_by_category.get(category, 0),
+            "current_bar_pct": bar_pct(current_by_category.get(category, 0)),
+            "previous_bar_pct": bar_pct(previous_by_category.get(category, 0)),
+        }
+        for category in all_categories
+    ]
+    return sorted(rows, key=lambda row: max(row["current_total"], row["previous_total"]), reverse=True)
+
+
 @app.route("/analytics")
 def analytics():
     if "user_id" not in session:
         return redirect(url_for("login"))
 
-    return render_template("analytics.html")
+    sync_due_recurring_expenses(session["user_id"])
+
+    curr_start, curr_end, prev_start, prev_end = _current_and_previous_month_ranges()
+
+    current_summary = get_user_expense_summary(session["user_id"], curr_start, curr_end)
+    previous_summary = get_user_expense_summary(session["user_id"], prev_start, prev_end)
+
+    current_total = current_summary["total_amount"]
+    previous_total = previous_summary["total_amount"]
+
+    if previous_total == 0 and current_total == 0:
+        change_label = "N/A"
+        change_direction = "flat"
+    elif previous_total == 0:
+        change_label = "New spending"
+        change_direction = "up"
+    else:
+        percent_change = (current_total - previous_total) / previous_total * 100
+        if percent_change > 0:
+            change_direction = "up"
+        elif percent_change < 0:
+            change_direction = "down"
+        else:
+            change_direction = "flat"
+        change_label = f"{'+' if percent_change > 0 else ''}{percent_change:.1f}%"
+
+    current_breakdown = get_category_breakdown(session["user_id"], curr_start, curr_end)
+    previous_breakdown = get_category_breakdown(session["user_id"], prev_start, prev_end)
+
+    current_by_category = {row["category"]: row["total"] for row in current_breakdown}
+    previous_by_category = {row["category"]: row["total"] for row in previous_breakdown}
+
+    category_comparison = _build_category_comparison(current_by_category, previous_by_category)
+
+    return render_template(
+        "analytics.html",
+        current_total=current_total,
+        previous_total=previous_total,
+        change_label=change_label,
+        change_direction=change_direction,
+        category_comparison=category_comparison,
+    )
 
 
 @app.route("/expenses/add", methods=["GET", "POST"])
