@@ -14,6 +14,17 @@ CATEGORIES = [
     "Entertainment", "Shopping", "Other",
 ]
 
+CURRENCIES = ["INR", "USD", "EUR", "GBP", "JPY", "AUD"]
+
+CURRENCY_SYMBOLS = {
+    "INR": "₹",
+    "USD": "$",
+    "EUR": "€",
+    "GBP": "£",
+    "JPY": "¥",
+    "AUD": "A$",
+}
+
 
 def create_user(name, email, password):
     conn = get_db()
@@ -49,13 +60,13 @@ def get_user_by_id(user_id):
         conn.close()
 
 
-def create_expense(user_id, amount, category, date, description):
+def create_expense(user_id, amount, category, date, description, currency="INR"):
     conn = get_db()
     try:
         cursor = conn.execute(
-            "INSERT INTO expenses (user_id, amount, category, date, description) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (user_id, amount, category, date, description),
+            "INSERT INTO expenses (user_id, amount, category, date, description, currency) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, amount, category, date, description, currency),
         )
         conn.commit()
         return cursor.lastrowid
@@ -73,13 +84,13 @@ def get_expense_by_id(expense_id):
         conn.close()
 
 
-def update_expense(expense_id, amount, category, date, description):
+def update_expense(expense_id, amount, category, date, description, currency="INR"):
     conn = get_db()
     try:
         conn.execute(
-            "UPDATE expenses SET amount = ?, category = ?, date = ?, description = ? "
-            "WHERE id = ?",
-            (amount, category, date, description, expense_id),
+            "UPDATE expenses SET amount = ?, category = ?, date = ?, description = ?, "
+            "currency = ? WHERE id = ?",
+            (amount, category, date, description, currency, expense_id),
         )
         conn.commit()
     finally:
@@ -118,7 +129,7 @@ def _advance_interval(d, interval):
 
 
 def create_recurring_expense(
-    user_id, amount, category, description, interval, start_date
+    user_id, amount, category, description, interval, start_date, currency="INR"
 ):
     conn = get_db()
     try:
@@ -126,9 +137,9 @@ def create_recurring_expense(
         # sync_due_recurring_expenses() will treat as the first occurrence due.
         cursor = conn.execute(
             "INSERT INTO recurring_expenses "
-            "(user_id, amount, category, description, interval, next_run_date) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, amount, category, description, interval, start_date),
+            "(user_id, amount, category, description, interval, next_run_date, currency) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, amount, category, description, interval, start_date, currency),
         )
         conn.commit()
         return cursor.lastrowid
@@ -190,14 +201,16 @@ def sync_due_recurring_expenses(user_id):
                 # — a mid-backfill crash can't leave rows generated without
                 # next_run_date having moved past them.
                 conn.execute(
-                    "INSERT INTO expenses (user_id, amount, category, date, description) "
-                    "VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO expenses "
+                    "(user_id, amount, category, date, description, currency) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
                     (
                         template["user_id"],
                         template["amount"],
                         template["category"],
                         next_run.strftime("%Y-%m-%d"),
                         template["description"],
+                        template["currency"],
                     ),
                 )
                 next_run = _advance_interval(next_run, template["interval"])
@@ -361,7 +374,67 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS exchange_rates (
+                currency TEXT PRIMARY KEY,
+                rate_to_inr REAL NOT NULL
+            )
+        """)
+
+        # Older DB files created before multi-currency support (Step 13) predate
+        # these columns — CREATE TABLE IF NOT EXISTS above is a no-op against
+        # them, so backfill via ALTER TABLE. SQLite has no "ADD COLUMN IF NOT
+        # EXISTS", so each statement is individually guarded: it fails harmlessly
+        # on a DB where the column already exists (either a fresh DB created with
+        # the up-to-date CREATE TABLE above, or a DB already migrated once).
+        migrations = [
+            "ALTER TABLE users ADD COLUMN preferred_currency TEXT NOT NULL DEFAULT 'INR'",
+            "ALTER TABLE expenses ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'",
+            "ALTER TABLE recurring_expenses ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'",
+        ]
+        for statement in migrations:
+            try:
+                conn.execute(statement)
+            except sqlite3.OperationalError:
+                pass
+
         conn.commit()
+    finally:
+        conn.close()
+
+
+def seed_exchange_rates():
+    # Separate from seed_db(), which only ever runs once (guarded on `users`
+    # being empty) and would never seed rates on an already-seeded real DB.
+    # Rates are static/illustrative — manually maintained, not a live feed —
+    # see templates/exchange_rates.html for the user-facing disclaimer.
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT COUNT(*) AS n FROM exchange_rates").fetchone()
+        if existing["n"] > 0:
+            return
+
+        rates = [
+            ("INR", 1.0),
+            ("USD", 83.0),
+            ("EUR", 90.0),
+            ("GBP", 105.0),
+            ("JPY", 0.56),
+            ("AUD", 55.0),
+        ]
+        conn.executemany(
+            "INSERT INTO exchange_rates (currency, rate_to_inr) VALUES (?, ?)",
+            rates,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_exchange_rates():
+    conn = get_db()
+    try:
+        return conn.execute("SELECT * FROM exchange_rates").fetchall()
     finally:
         conn.close()
 
@@ -406,12 +479,12 @@ def seed_db():
 # ------------------------------------------------------------------ #
 
 # --- update_user (Subagent 1) ---
-def update_user(user_id, name, email):
+def update_user(user_id, name, email, preferred_currency):
     conn = get_db()
     try:
         conn.execute(
-            "UPDATE users SET name = ?, email = ? WHERE id = ?",
-            (name, email, user_id),
+            "UPDATE users SET name = ?, email = ?, preferred_currency = ? WHERE id = ?",
+            (name, email, preferred_currency, user_id),
         )
         conn.commit()
     finally:

@@ -102,6 +102,11 @@
     margin-bottom: 0;
 }
 
+.date-filter-form .form-hint {
+    flex-basis: 100%;
+    margin: -0.5rem 0 0;
+}
+
 .date-filter-clear {
     font-size: 0.85rem;
     color: var(--ink-muted);
@@ -169,6 +174,19 @@
 .transactions-table tr:last-child td { border-bottom: none; }
 
 .col-amount { text-align: right; }
+
+.amount-original {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    margin-top: -0.75rem;
+    margin-bottom: 1.25rem;
+}
 
 .col-actions {
     display: flex;

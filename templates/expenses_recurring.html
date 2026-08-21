@@ -34,6 +34,15 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label for="currency">Currency</label>
+                    <select id="currency" name="currency" class="form-input" required>
+                        <option value="" disabled {% if not currency %}selected{% endif %}>Select a currency</option>
+                        {% for c in currencies %}
+                        <option value="{{ c }}" {% if currency == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="interval">Repeats</label>
                     <select id="interval" name="interval" class="form-input" required>
                         <option value="" disabled {% if not interval %}selected{% endif %}>Select frequency</option>
@@ -80,7 +89,7 @@
                         <td>{{ r["next_run_date"] }}</td>
                         <td>{{ r["description"] or "" }}</td>
                         <td><span class="cat-badge cat-{{ r["category"]|lower }}">{{ r["category"] }}</span></td>
-                        <td class="col-amount">₹{{ "{:,.2f}".format(r["amount"]) }}</td>
+                        <td class="col-amount">{{ currency_symbols[r["currency"]] }}{{ "{:,.2f}".format(r["amount"]) }}</td>
                         <td>{{ r["interval"]|capitalize }}</td>
                         <td class="col-actions">
                             <form method="POST" action="{{ url_for('delete_recurring_expense', id=r['id']) }}" class="recurring-delete-form">

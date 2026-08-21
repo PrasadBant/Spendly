@@ -23,6 +23,7 @@
                     <a href="{{ url_for('analytics') }}" class="nav-link {{ 'active' if request.endpoint == 'analytics' else '' }}">Analytics</a>
                     <a href="{{ url_for('expenses_recurring') }}" class="nav-link {{ 'active' if request.endpoint == 'expenses_recurring' else '' }}">Recurring</a>
                     <a href="{{ url_for('expenses_search') }}" class="nav-link {{ 'active' if request.endpoint == 'expenses_search' else '' }}">Search</a>
+                    <a href="{{ url_for('exchange_rates') }}" class="nav-link {{ 'active' if request.endpoint == 'exchange_rates' else '' }}">Rates</a>
                     <span class="nav-user">{{ current_user.name if current_user else '' }}</span>
                     <a href="{{ url_for('logout') }}" class="nav-cta">Sign out</a>
                 {% else %}

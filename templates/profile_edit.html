@@ -28,6 +28,15 @@
                     <input type="email" id="email" name="email"
                            class="form-input" value="{{ email or '' }}" required>
                 </div>
+                <div class="form-group">
+                    <label for="preferred_currency">Preferred currency</label>
+                    <select id="preferred_currency" name="preferred_currency" class="form-input" required>
+                        <option value="" disabled {% if not preferred_currency %}selected{% endif %}>Select a currency</option>
+                        {% for c in currencies %}
+                        <option value="{{ c }}" {% if preferred_currency == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <button type="submit" class="btn-submit">Save changes</button>
             </form>
         </div>

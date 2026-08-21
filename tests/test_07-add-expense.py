@@ -55,6 +55,7 @@ def _count_all_expenses():
 VALID_PAYLOAD = {
     "amount": "42.50",
     "category": "Food",
+    "currency": "INR",
     "date": "2026-03-15",
     "description": "Groceries for the week",
 }
@@ -272,6 +273,7 @@ class TestUserIsolation:
         second_payload = {
             "amount": "99.99",
             "category": "Transport",
+            "currency": "INR",
             "date": "2026-04-01",
             "description": "Second user's ride",
         }

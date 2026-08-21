@@ -20,11 +20,11 @@
         <div class="profile-stats-grid">
             <div class="stat-card">
                 <span class="stat-label">This Month</span>
-                <span class="stat-value">₹{{ "{:,.2f}".format(current_total) }}</span>
+                <span class="stat-value">{{ currency_symbol }}{{ "{:,.2f}".format(current_total) }}</span>
             </div>
             <div class="stat-card">
                 <span class="stat-label">Last Month</span>
-                <span class="stat-value">₹{{ "{:,.2f}".format(previous_total) }}</span>
+                <span class="stat-value">{{ currency_symbol }}{{ "{:,.2f}".format(previous_total) }}</span>
             </div>
             <div class="stat-card">
                 <span class="stat-label">Change</span>
@@ -46,14 +46,14 @@
                         <div class="category-bar-track">
                             <div class="category-bar cat-bar-{{ row['category']|lower }}" style="width: {{ row['current_bar_pct'] }}%"></div>
                         </div>
-                        <span class="comparison-bar-value">₹{{ "{:,.2f}".format(row["current_total"]) }}</span>
+                        <span class="comparison-bar-value">{{ currency_symbol }}{{ "{:,.2f}".format(row["current_total"]) }}</span>
                     </div>
                     <div class="comparison-bar-line">
                         <span class="comparison-bar-label">Last month</span>
                         <div class="category-bar-track">
                             <div class="category-bar category-bar-muted" style="width: {{ row['previous_bar_pct'] }}%"></div>
                         </div>
-                        <span class="comparison-bar-value">₹{{ "{:,.2f}".format(row["previous_total"]) }}</span>
+                        <span class="comparison-bar-value">{{ currency_symbol }}{{ "{:,.2f}".format(row["previous_total"]) }}</span>
                     </div>
                 </div>
                 {% endfor %}
