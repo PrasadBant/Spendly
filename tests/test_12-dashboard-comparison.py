@@ -166,6 +166,7 @@ def _snippet_after(body, marker, length=1200):
 VALID_RECURRING_PAYLOAD = {
     "amount": "750",
     "category": "Bills",
+    "currency": "INR",
     "interval": "monthly",
     "description": "Auto-generated rent",
 }

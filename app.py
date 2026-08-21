@@ -10,24 +10,26 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from database.db import (
     CATEGORIES,
+    CURRENCIES,
+    CURRENCY_SYMBOLS,
     create_expense,
     create_recurring_expense,
     create_user,
     delete_expense_by_id,
     delete_recurring_expense_by_id,
     delete_user,
-    get_category_breakdown,
     get_db,
+    get_exchange_rates,
     get_expense_by_id,
     get_recurring_expense_by_id,
     get_recurring_expenses,
     get_user_by_email,
     get_user_by_id,
-    get_user_expense_summary,
     get_user_expenses,
     init_db,
     search_user_expenses,
     seed_db,
+    seed_exchange_rates,
     sync_due_recurring_expenses,
     update_expense,
     update_user,
@@ -47,6 +49,7 @@ def inject_current_user():
 with app.app_context():
     init_db()
     seed_db()
+    seed_exchange_rates()
 
 
 # ------------------------------------------------------------------ #
@@ -159,10 +162,21 @@ def profile():
     )
 
     user = get_user_by_id(session["user_id"])
-    summary = get_user_expense_summary(session["user_id"], start_date, end_date)
-    category_breakdown = get_category_breakdown(session["user_id"], start_date, end_date)
-    recent_expenses = get_user_expenses(
-        session["user_id"], limit=6, start_date=start_date, end_date=end_date
+    preferred_currency = user["preferred_currency"]
+    rates = _rates_map()
+
+    # Fetch every matching expense (not just the 6 most recent) since the
+    # summary/category totals below must be computed from converted amounts
+    # in Python — get_user_expense_summary()/get_category_breakdown() sum raw
+    # `amount` in SQL, which is wrong once expenses can be mixed-currency.
+    all_expenses = get_user_expenses(
+        session["user_id"], start_date=start_date, end_date=end_date
+    )
+    total_amount, category_totals = _summarize_converted(all_expenses, preferred_currency, rates)
+    summary = {"total_amount": total_amount, "expense_count": len(all_expenses)}
+    category_breakdown = sorted(
+        ({"category": c, "total": t} for c, t in category_totals.items()),
+        key=lambda row: row["total"], reverse=True,
     )
 
     name_parts = user["name"].split()
@@ -170,7 +184,9 @@ def profile():
     member_since = datetime.strptime(
         user["created_at"], "%Y-%m-%d %H:%M:%S"
     ).strftime("%d %b %Y")
-    recent_expenses = _format_expenses_for_display(recent_expenses)
+    # all_expenses is already ordered date DESC, id DESC (same as the old
+    # limit=6 query), so slicing here reproduces the old "6 most recent" cap.
+    recent_expenses = _format_expenses_for_display(all_expenses[:6], preferred_currency, rates)
     top_category = category_breakdown[0]["category"] if category_breakdown else "—"
     max_category_total = category_breakdown[0]["total"] if category_breakdown else 0
 
@@ -186,22 +202,60 @@ def profile():
         max_category_total=max_category_total,
         start_date=start_date,
         end_date=end_date,
+        currency_symbol=CURRENCY_SYMBOLS[preferred_currency],
+        currency_symbols=CURRENCY_SYMBOLS,
     )
 
 
-def _format_expenses_for_display(expenses):
+def _format_expenses_for_display(expenses, preferred_currency, rates):
     """Shared by profile()/expenses_search() — turns raw expense rows into
-    display-ready dicts (formatted date, description defaulted to "")."""
+    display-ready dicts (formatted date, description defaulted to "",
+    amount converted into preferred_currency with the original amount/
+    currency retained for display when they differ)."""
     return [
         {
             "id": e["id"],
             "date": datetime.strptime(e["date"], "%Y-%m-%d").strftime("%d %b %Y"),
             "description": e["description"] or "",
             "category": e["category"],
-            "amount": e["amount"],
+            "amount": _convert_amount(e["amount"], e["currency"], preferred_currency, rates),
+            "original_amount": e["amount"],
+            "original_currency": e["currency"],
+            "show_original": e["currency"] != preferred_currency,
         }
         for e in expenses
     ]
+
+
+def _rates_map():
+    """{currency_code: rate_to_inr} built from the exchange_rates table."""
+    return {row["currency"]: row["rate_to_inr"] for row in get_exchange_rates()}
+
+
+def _convert_amount(amount, from_currency, to_currency, rates):
+    """One-hop conversion through INR: amount_in_target =
+    amount * rate(from->INR) / rate(target->INR). Falls back to a 1:1 rate
+    for any currency missing from `rates` — defensive only, since currency/
+    preferred_currency are always validated against CURRENCIES, and every
+    CURRENCIES entry is seeded into exchange_rates."""
+    if from_currency == to_currency:
+        return amount
+    rate_from = rates.get(from_currency, 1.0)
+    rate_to = rates.get(to_currency, 1.0)
+    return amount * rate_from / rate_to
+
+
+def _summarize_converted(expenses, preferred_currency, rates):
+    """Converts each raw expense row into preferred_currency and returns
+    (total, category_totals) — category_totals is {category: converted_total},
+    only including categories that actually have an expense in this set."""
+    total = 0.0
+    category_totals = {}
+    for e in expenses:
+        converted = _convert_amount(e["amount"], e["currency"], preferred_currency, rates)
+        total += converted
+        category_totals[e["category"]] = category_totals.get(e["category"], 0.0) + converted
+    return total, category_totals
 
 
 def _validate_amount(raw_amount):
@@ -323,13 +377,17 @@ def analytics():
 
     sync_due_recurring_expenses(session["user_id"])
 
+    user = get_user_by_id(session["user_id"])
+    preferred_currency = user["preferred_currency"]
+    rates = _rates_map()
+
     curr_start, curr_end, prev_start, prev_end = _current_and_previous_month_ranges()
 
-    current_summary = get_user_expense_summary(session["user_id"], curr_start, curr_end)
-    previous_summary = get_user_expense_summary(session["user_id"], prev_start, prev_end)
+    current_expenses = get_user_expenses(session["user_id"], start_date=curr_start, end_date=curr_end)
+    previous_expenses = get_user_expenses(session["user_id"], start_date=prev_start, end_date=prev_end)
 
-    current_total = current_summary["total_amount"]
-    previous_total = previous_summary["total_amount"]
+    current_total, current_by_category = _summarize_converted(current_expenses, preferred_currency, rates)
+    previous_total, previous_by_category = _summarize_converted(previous_expenses, preferred_currency, rates)
 
     if previous_total == 0 and current_total == 0:
         change_label = "N/A"
@@ -347,12 +405,6 @@ def analytics():
             change_direction = "flat"
         change_label = f"{'+' if percent_change > 0 else ''}{percent_change:.1f}%"
 
-    current_breakdown = get_category_breakdown(session["user_id"], curr_start, curr_end)
-    previous_breakdown = get_category_breakdown(session["user_id"], prev_start, prev_end)
-
-    current_by_category = {row["category"]: row["total"] for row in current_breakdown}
-    previous_by_category = {row["category"]: row["total"] for row in previous_breakdown}
-
     category_comparison = _build_category_comparison(current_by_category, previous_by_category)
 
     return render_template(
@@ -362,6 +414,7 @@ def analytics():
         change_label=change_label,
         change_direction=change_direction,
         category_comparison=category_comparison,
+        currency_symbol=CURRENCY_SYMBOLS[preferred_currency],
     )
 
 
@@ -371,18 +424,24 @@ def add_expense():
         return redirect(url_for("login"))
 
     if request.method == "GET":
-        return render_template("expenses_add.html", categories=CATEGORIES)
+        user = get_user_by_id(session["user_id"])
+        return render_template(
+            "expenses_add.html", categories=CATEGORIES, currencies=CURRENCIES,
+            currency=user["preferred_currency"],
+        )
 
     amount = request.form.get("amount", "").strip()
     category = request.form.get("category", "").strip()
+    currency = request.form.get("currency", "").strip()
     date = request.form.get("date", "").strip()
     description = request.form.get("description", "").strip()
 
     def render_error(error):
         return render_template(
-            "expenses_add.html", categories=CATEGORIES,
+            "expenses_add.html", categories=CATEGORIES, currencies=CURRENCIES,
             error=error,
-            amount=amount, category=category, date=date, description=description,
+            amount=amount, category=category, currency=currency,
+            date=date, description=description,
         )
 
     amount_value, amount_error = _validate_amount(amount)
@@ -392,6 +451,9 @@ def add_expense():
     if category not in CATEGORIES:
         return render_error("Please select a valid category.")
 
+    if currency not in CURRENCIES:
+        return render_error("Please select a valid currency.")
+
     date_error = _validate_date_string(date, "Please enter a valid date.")
     if date_error:
         return render_error(date_error)
@@ -399,7 +461,7 @@ def add_expense():
     try:
         # expenses.user_id has a FOREIGN KEY constraint; defensive guard in
         # case the session's user was deleted in another tab mid-request.
-        create_expense(session["user_id"], amount_value, category, date, description)
+        create_expense(session["user_id"], amount_value, category, date, description, currency)
     except sqlite3.IntegrityError:
         return render_error("Could not save expense. Please try again.")
 
@@ -417,21 +479,23 @@ def edit_expense(id):
 
     if request.method == "GET":
         return render_template(
-            "expenses_edit.html", categories=CATEGORIES, expense=expense,
-            amount=expense["amount"], category=expense["category"],
+            "expenses_edit.html", categories=CATEGORIES, currencies=CURRENCIES, expense=expense,
+            amount=expense["amount"], category=expense["category"], currency=expense["currency"],
             date=expense["date"], description=expense["description"] or "",
         )
 
     amount = request.form.get("amount", "").strip()
     category = request.form.get("category", "").strip()
+    currency = request.form.get("currency", "").strip()
     date = request.form.get("date", "").strip()
     description = request.form.get("description", "").strip()
 
     def render_error(error):
         return render_template(
-            "expenses_edit.html", categories=CATEGORIES, expense=expense,
+            "expenses_edit.html", categories=CATEGORIES, currencies=CURRENCIES, expense=expense,
             error=error,
-            amount=amount, category=category, date=date, description=description,
+            amount=amount, category=category, currency=currency,
+            date=date, description=description,
         )
 
     amount_value, amount_error = _validate_amount(amount)
@@ -441,12 +505,15 @@ def edit_expense(id):
     if category not in CATEGORIES:
         return render_error("Please select a valid category.")
 
+    if currency not in CURRENCIES:
+        return render_error("Please select a valid currency.")
+
     date_error = _validate_date_string(date, "Please enter a valid date.")
     if date_error:
         return render_error(date_error)
 
     try:
-        update_expense(id, amount_value, category, date, description)
+        update_expense(id, amount_value, category, date, description, currency)
     except sqlite3.IntegrityError:
         return render_error("Could not save expense. Please try again.")
 
@@ -471,10 +538,14 @@ def expenses_recurring():
     if "user_id" not in session:
         return redirect(url_for("login"))
 
+    user = get_user_by_id(session["user_id"])
     recurring_expenses = get_recurring_expenses(session["user_id"])
     return render_template(
         "expenses_recurring.html",
         categories=CATEGORIES,
+        currencies=CURRENCIES,
+        currency_symbols=CURRENCY_SYMBOLS,
+        currency=user["preferred_currency"],
         recurring_expenses=recurring_expenses,
     )
 
@@ -486,6 +557,7 @@ def add_recurring_expense():
 
     amount = request.form.get("amount", "").strip()
     category = request.form.get("category", "").strip()
+    currency = request.form.get("currency", "").strip()
     interval = request.form.get("interval", "").strip()
     start_date = request.form.get("start_date", "").strip()
     description = request.form.get("description", "").strip()
@@ -493,9 +565,10 @@ def add_recurring_expense():
     def render_error(error):
         return render_template(
             "expenses_recurring.html", categories=CATEGORIES,
+            currencies=CURRENCIES, currency_symbols=CURRENCY_SYMBOLS,
             recurring_expenses=get_recurring_expenses(session["user_id"]),
             error=error,
-            amount=amount, category=category, interval=interval,
+            amount=amount, category=category, currency=currency, interval=interval,
             start_date=start_date, description=description,
         )
 
@@ -505,6 +578,9 @@ def add_recurring_expense():
 
     if category not in CATEGORIES:
         return render_error("Please select a valid category.")
+
+    if currency not in CURRENCIES:
+        return render_error("Please select a valid currency.")
 
     if interval not in ("weekly", "monthly"):
         return render_error("Please select a valid interval.")
@@ -523,7 +599,7 @@ def add_recurring_expense():
     try:
         create_recurring_expense(
             session["user_id"], amount_value, category, description,
-            interval, start_date,
+            interval, start_date, currency,
         )
     except sqlite3.IntegrityError:
         return render_error("Could not save recurring expense. Please try again.")
@@ -561,10 +637,16 @@ def expenses_search():
         raw_start_date, raw_end_date,
     ])
 
+    user = get_user_by_id(session["user_id"])
+    preferred_currency = user["preferred_currency"]
+    rates = _rates_map()
+
     def render(error=None, results=None):
         return render_template(
             "expenses_search.html",
             categories=CATEGORIES,
+            currency_symbol=CURRENCY_SYMBOLS[preferred_currency],
+            currency_symbols=CURRENCY_SYMBOLS,
             error=error,
             filters_applied=filters_applied,
             results=results,
@@ -611,7 +693,19 @@ def expenses_search():
         start_date=start_date,
         end_date=end_date,
     )
-    return render(results=_format_expenses_for_display(matches))
+    return render(results=_format_expenses_for_display(matches, preferred_currency, rates))
+
+
+@app.route("/exchange-rates")
+def exchange_rates():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    rates_map = _rates_map()
+    rates = [{"currency": c, "rate_to_inr": rates_map[c]} for c in CURRENCIES]
+    return render_template(
+        "exchange_rates.html", rates=rates, currency_symbols=CURRENCY_SYMBOLS,
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -627,29 +721,39 @@ def profile_edit():
     user = get_user_by_id(session["user_id"])
 
     if request.method == "GET":
-        return render_template("profile_edit.html", name=user["name"], email=user["email"])
+        return render_template(
+            "profile_edit.html", name=user["name"], email=user["email"],
+            currencies=CURRENCIES, preferred_currency=user["preferred_currency"],
+        )
 
     name = request.form.get("name", "").strip()
     email = request.form.get("email", "").strip()
+    preferred_currency = request.form.get("preferred_currency", "").strip()
 
     if not name or not email:
         return render_template(
             "profile_edit.html", error="All fields are required.",
-            name=name, email=email,
+            name=name, email=email, currencies=CURRENCIES, preferred_currency=preferred_currency,
         )
 
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         return render_template(
             "profile_edit.html", error="Please enter a valid email address.",
-            name=name, email=email,
+            name=name, email=email, currencies=CURRENCIES, preferred_currency=preferred_currency,
+        )
+
+    if preferred_currency not in CURRENCIES:
+        return render_template(
+            "profile_edit.html", error="Please select a valid currency.",
+            name=name, email=email, currencies=CURRENCIES, preferred_currency=preferred_currency,
         )
 
     try:
-        update_user(session["user_id"], name, email)
+        update_user(session["user_id"], name, email, preferred_currency)
     except sqlite3.IntegrityError:
         return render_template(
             "profile_edit.html", error="That email is already in use by another account.",
-            name=name, email=email,
+            name=name, email=email, currencies=CURRENCIES, preferred_currency=preferred_currency,
         )
 
     return redirect(url_for("profile"))

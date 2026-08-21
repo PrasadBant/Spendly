@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Exchange Rates — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="profile-dashboard">
+    <div class="profile-dashboard-inner">
+
+        <div class="auth-header">
+            <h1 class="auth-title">Exchange Rates</h1>
+            <p class="auth-subtitle">
+                Static, manually maintained rates to INR — not live market data.
+                Used to convert your expenses into your preferred currency for display.
+            </p>
+        </div>
+
+        <div class="panel">
+            <h2 class="panel-title">Supported Currencies</h2>
+            <table class="transactions-table">
+                <thead>
+                    <tr>
+                        <th>Currency</th>
+                        <th>Symbol</th>
+                        <th class="col-amount">Rate to INR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rates %}
+                    <tr>
+                        <td>{{ r["currency"] }}</td>
+                        <td>{{ currency_symbols[r["currency"]] }}</td>
+                        <td class="col-amount">{{ "{:,.4f}".format(r["rate_to_inr"]) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</section>
+
+{% endblock %}

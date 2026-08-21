@@ -126,6 +126,7 @@ def _days_from_today(delta_days):
 VALID_PAYLOAD = {
     "amount": "1200",
     "category": "Bills",
+    "currency": "INR",
     "interval": "monthly",
     "start_date": "2026-01-01",
     "description": "Rent",
@@ -384,6 +385,7 @@ class TestProfileSyncGeneration:
         payload = {
             "amount": "1200",
             "category": "Bills",
+            "currency": "INR",
             "interval": "monthly",
             "start_date": _today_str(),
             "description": "Rent due today",
@@ -408,6 +410,7 @@ class TestProfileSyncGeneration:
         payload = {
             "amount": "50",
             "category": "Food",
+            "currency": "INR",
             "interval": "weekly",
             "start_date": _today_str(),
             "description": "Weekly groceries",
@@ -424,6 +427,7 @@ class TestProfileSyncGeneration:
         payload = {
             "amount": "1200",
             "category": "Bills",
+            "currency": "INR",
             "interval": "monthly",
             "start_date": _today_str(),
             "description": "Rent advance check",
@@ -447,6 +451,7 @@ class TestProfileSyncGeneration:
         payload = {
             "amount": "300",
             "category": "Shopping",
+            "currency": "INR",
             "interval": "monthly",
             "start_date": _days_from_today(10),
             "description": "Future subscription",
@@ -470,6 +475,7 @@ class TestProfileSyncGeneration:
         payload = {
             "amount": "1200",
             "category": "Bills",
+            "currency": "INR",
             "interval": "monthly",
             "start_date": _today_str(),
             "description": "Idempotency rent",
@@ -515,6 +521,7 @@ class TestProfileSyncGeneration:
         payload = {
             "amount": "20",
             "category": "Food",
+            "currency": "INR",
             "interval": "weekly",
             "start_date": start_str,
             "description": "Backfilled weekly coffee",
@@ -557,6 +564,7 @@ class TestMonthEndClamping:
         payload = {
             "amount": "100",
             "category": "Bills",
+            "currency": "INR",
             "interval": "monthly",
             "start_date": "2026-01-31",
             "description": "Month-end rent clamp test",
@@ -589,6 +597,7 @@ class TestMonthEndClamping:
         payload = {
             "amount": "100",
             "category": "Bills",
+            "currency": "INR",
             "interval": "monthly",
             "start_date": "2026-01-31",
             "description": "No crash on clamp",
@@ -687,6 +696,7 @@ class TestCancelDoesNotDeleteGeneratedExpenses:
         payload = {
             "amount": "1200",
             "category": "Bills",
+            "currency": "INR",
             "interval": "monthly",
             "start_date": _today_str(),
             "description": "Rent to be cancelled",
@@ -718,6 +728,7 @@ class TestCancelDoesNotDeleteGeneratedExpenses:
         payload = {
             "amount": "1200",
             "category": "Bills",
+            "currency": "INR",
             "interval": "monthly",
             "start_date": _today_str(),
             "description": "Rent stop generation",
